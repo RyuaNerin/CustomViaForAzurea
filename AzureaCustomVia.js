@@ -1,8 +1,11 @@
-﻿// Azurea-X
+// Azurea-X
 // By @RyuaNerin
+// 2012-09-01
+// 2014-02-12
+// 2016-03-12
 
-// Alt + C : OAuth 발급여부 확인
 // Alt + L : OAuth 발급
+// Alt + C : OAuth 발급 확인
 // Alt + D : OAuth 발급 삭제
 
 // A JavaScript implementation of the Secure Hash Algorithm, SHA-1, as defined
@@ -15,19 +18,22 @@
 var hexcase = 0;
 var b64pad  = "";
 var chrsz   = 8;
-function b64_hmac_sha1(key, data){ return binb2b64(core_hmac_sha1(key, data));}
+function b64_hmac_sha1(key, data)
+{
+	return binb2b64(core_hmac_sha1(key, data));
+}
 function core_sha1(x, len)
 {
 	x[len >> 5] |= 0x80 << (24 - len % 32);
 	x[((len + 64 >> 9) << 4) + 15] = len;
-	
+
 	var w = Array(80);
 	var a = 1732584193;
 	var b = -271733879;
 	var c = -1732584194;
 	var d = 271733878;
 	var e = -1009589776;
-	
+
 	for(var i = 0; i < x.length; i += 16)
 	{
 		var olda = a;
@@ -78,14 +84,14 @@ function core_hmac_sha1(key, data)
 {
 	var bkey = str2binb(key);
 	if(bkey.length > 16) bkey = core_sha1(bkey, key.length * chrsz);
-	
+
 	var ipad = Array(16), opad = Array(16);
 	for(var i = 0; i < 16; i++)
 	{
 		ipad[i] = bkey[i] ^ 0x36363636;
 		opad[i] = bkey[i] ^ 0x5C5C5C5C;
 	}
-	
+
 	var hash = core_sha1(ipad.concat(str2binb(data)), 512 + data.length * chrsz);
   return core_sha1(opad.concat(hash), 512 + 160);
 }
@@ -142,19 +148,19 @@ function urlEncode(string)
 			hex = 0 + hex;
 		return '%' + hex;
 	}
-	
+
 	if (!string) return '';
-	
+
 	string = string + '';
-	var reserved_chars = /[ \r\n!*"'();:@&=+$,\/?%#\[\]<>{}|`^\\\u0080-\uffff]/,
+	var reserved_chars = /[ \r\n\t!*"'();:@&=+$,\/?%#\[\]<>{}|`^\\\u0080-\uffff]/,
 	str_len = string.length, i, string_arr = string.split(''), c;
-	
+
 	for (i = 0; i < str_len; i++)
 	{
 		if (c = string_arr[i].match(reserved_chars))
 		{
 			c = c[0].charCodeAt(0);
-			
+
 			if (c < 128)
 				string_arr[i] = hex(c);
 			else if (c < 2048)
@@ -165,9 +171,11 @@ function urlEncode(string)
 				string_arr[i] = hex(240+(c>>18)) + hex(128+((c>>12)&63)) + hex(128+((c>>6)&63)) + hex(128+(c&63));
 		}
 	}
-	
+
 	return string_arr.join('');
 };
+
+// 단축키 설정 영역
 
 System.addKeyBindingHandler("1".charCodeAt(0), 1, function() { System.setActiveProfile(0); });
 System.addKeyBindingHandler("2".charCodeAt(0), 1, function() { System.setActiveProfile(1); });
@@ -180,113 +188,105 @@ System.addKeyBindingHandler("8".charCodeAt(0), 1, function() { System.setActiveP
 System.addKeyBindingHandler("9".charCodeAt(0), 1, function() { System.setActiveProfile(8); });
 System.addKeyBindingHandler("0".charCodeAt(0), 1, function() { System.setActiveProfile(9); });
 
-var via_usable = true;
+TwitterService.addEventListener("preSendUpdateStatus", TweetByCustomVia);
+System.addKeyBindingHandler("C".charCodeAt(0), 4, CheckProfile);
+System.addKeyBindingHandler("D".charCodeAt(0), 4, DeleteOAuth);
+System.addKeyBindingHandler("L".charCodeAt(0), 4, GenarateOAuth);
 
-var ConsumerToken = System.settings.getValue("user.RyuaNerin.CustomVia", "ConsumerToken");
-var ConsumerSecret = System.settings.getValue("user.RyuaNerin.CustomVia", "ConsumerSecret");
-if (!ConsumerToken || !ConsumerSecret || (ConsumerToken == "") || (ConsumerSecret == ""))
+//OAuth 인증 정보들
+var activatedProfile = -1;
+var oauthInfo = {};
+var oauthCur = null;
+
+// OAuth 인증 읽기
+if (FileSystem.privateStore.exists('oauth.txt'))
 {
-	ConsumerToken = "";
-	ConsumerSecret = "";
-	
-	ConsumerToken = System.inputBox("Consumer Token", "", false);
-	if (ConsumerToken && (ConsumerToken != ""))
+    var value = FileSystem.privateStore.read('oauth.txt', 3);
+    if (value != '')
 	{
-		ConsumerSecret = System.inputBox("Consumer Secret", "", false);
-		
-		if (!ConsumerToken || !ConsumerSecret || (ConsumerToken == "") || (ConsumerSecret == ""))
+        lines = value.split('\n');
+        for (var i = 0; i < lines.length; i++)
 		{
-			via_usable = false;
-		}
-		else
-		{
-			System.settings.setValue("user.RyuaNerin.CustomVia", "ConsumerToken", ConsumerToken);
-			System.settings.setValue("user.RyuaNerin.CustomVia", "ConsumerSecret", ConsumerSecret);
-			System.settings.reconfigure();
-		}
-	}
+            var stl = lines[i].split(' ');
+            if (stl.length == 6)
+				oauthInfo[stl[0]] = [ stl[1], stl[2], stl[3], stl[4], stl[5] ];
+        }
+    }
 }
-
-if (via_usable)
+function SaveSettings()
 {
-	TwitterService.addEventListener("preSendUpdateStatus", TweetByCustomVia);
-	System.addKeyBindingHandler("C".charCodeAt(0), 4, CheckProfile);
-	System.addKeyBindingHandler("D".charCodeAt(0), 4, DeleteOAuth);
-	System.addKeyBindingHandler("L".charCodeAt(0), 4, GenarateOAuth);
+	var str = '';
+	for (var key in oauthInfo)
+	{
+		var k = oauthInfo[key];
+		str += key + ' ' + k[0] + ' ' + k [1] + ' ' + k [2] + ' ' + k [3] + ' ' + k [4] + '\n';
+	}
+	FileSystem.privateStore.write('oauth.txt', str, 3);
 }
 
-var activedProfile = -1;
-var UserToken = "";
-var UserTokenSecret = "";
-var UserScreenName = "";
+// 본문
 
 function LoadToken()
 {
-	if (activedProfile != System.activeProfile)
+	if (activatedProfile != System.activeProfile)
 	{
-		activedProfile = System.activeProfile;
-		UserToken = System.settings.getValue("user.RyuaNerin.CustomVia.Profile" + System.activeProfile, "UserToken");
-		UserTokenSecret = System.settings.getValue("user.RyuaNerin.CustomVia.Profile" + System.activeProfile, "UserTokenSecret");
-		UserScreenName = System.settings.getValue("user.RyuaNerin.CustomVia.Profile" + System.activeProfile, "ScreenName");
+		activatedProfile = System.activeProfile;
+		if (String(activatedProfile) in oauthInfo)
+			oauthCur = oauthInfo[String(activatedProfile)];
+		else
+			oauthCur = null;
 	}
-	
-	if (!UserToken || !UserTokenSecret || (UserToken == "") || (UserTokenSecret == ""))
-		return false;
-	else
-		return true;
+
+	return oauthCur != null;
 }
 function CheckProfile()
 {
 	if (LoadToken())
-		System.alert("현재 프로필은 Custom Via 를 사용하고 있습니다\n로그인된 ID : @" + UserScreenName + "\nCustom Via 사용하지 않기 : Alt + D");
+		System.alert("현재 프로필은 Custom Via 를 사용하고 있습니다\n로그인된 ID : @" + oauthCur[4] + "\nCustom Via 사용하지 않기 : Alt + D");
 	else
 		System.alert("현재 프로필은 Custom Via 를 사용하고 있지 않습니다\nCustom Via 사용하기 : Alt + L");
 }
 function TweetByCustomVia(status)
 {
 	if (!LoadToken()) return;
-	
+
 	TextArea.hide();
-	
+
 	TweetWithCustomVia(status.in_reply_to_status_id, status.text);
-	
+
 	TextArea.in_reply_to_status_id = 0;
 	TextArea.text = "";
-		
+
 	return true;
 }
 function TweetWithCustomVia(in_reply_to_status_id, str)
 {
 	var hash_parameter = "";
-	
+
 	var result = false;
 
 	if (in_reply_to_status_id > 0) hash_parameter = "in_reply_to_status_id=" + in_reply_to_status_id + "&";
-	
-	hash_parameter += "oauth_consumer_key=" + ConsumerToken + "&oauth_nonce=" + getNonce() + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + getTimestamp() + "&oauth_token=" + UserToken + "&oauth_version=1.0&status=" + urlEncode(str);
+
+	hash_parameter += "oauth_consumer_key=" + oauthCur[0] + "&oauth_nonce=" + getNonce() + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + getTimestamp() + "&oauth_token=" + oauthCur[2] + "&oauth_version=1.0&status=" + urlEncode(str);
 	var hash_string = "POST&https%3A%2F%2Fapi.twitter.com%2F1.1%2Fstatuses%2Fupdate.json&" + urlEncode(hash_parameter);
-	var oauth_signature = b64_hmac_sha1(ConsumerSecret + "&" + UserTokenSecret, hash_string);
+	var oauth_signature = b64_hmac_sha1(oauthCur[1] + "&" + oauthCur[3], hash_string);
 	hash_parameter = hash_parameter + "&oauth_signature=" + urlEncode(oauth_signature) + "%3D";
-	
-	Http.postRequestAsync("https://api.twitter.com/1.1/statuses/update.json?" + hash_parameter, "", false, 
-			function(status)
+
+	Http.postRequestAsync("https://api.twitter.com/1.1/statuses/update.json?" + hash_parameter, "", false,
+		function(status)
+		{
+			if (status.statusCode != "200")
 			{
-				if (status.statusCode != "200")
+				if (TextArea.text == "")
 				{
-					if (status.body.indexOf("User is over daily status update limit") !== -1)
-						System.activeProfile = ++System.activeProfile % 10;
-					
-					
-					if (TextArea.text == "")
-					{
-						TextArea.in_reply_to_status_id = in_reply_to_status_id;
-						TextArea.text = str;
-						TextArea.show();
-						TextArea.setFocus();
-					}
+					TextArea.in_reply_to_status_id = in_reply_to_status_id;
+					TextArea.text = str;
+					TextArea.show();
+					TextArea.setFocus();
 				}
 			}
-		);
+		}
+	);
 }
 function DeleteOAuth()
 {
@@ -295,23 +295,19 @@ function DeleteOAuth()
 		System.alert("현재 프로필은 Custom Via 를 사용하고 있지 않습니다\nCustom Via 사용하기 : Alt + L");
 		return;
 	}
-	
-	System.settings.setValue("user.RyuaNerin.CustomVia.Profile" + System.activeProfile, "UserToken", "");
-	System.settings.setValue("user.RyuaNerin.CustomVia.Profile" + System.activeProfile, "UserTokenSecret", "");
-	System.settings.setValue("user.RyuaNerin.CustomVia.Profile" + System.activeProfile, "ScreenName", "");
-	System.settings.reconfigure();
-	
+
+    oauthCur = null;
+	delete oauthInfo[String(System.activeProfile)];
+    SaveSettings();
+
 	System.alert("현재 프로필의 Custom Via 인증 정보를 삭제했습니다");
-	
-	UserToken = null;
-	UserTokenSecret = null;
 }
 function ParseQuerystringParameter(parameterName, text)
 {
 	var expr = new RegExp(parameterName + "=([^&]+)", "gi");
 	var matching = expr.exec(text);
 	if (!matching) return null;
-	
+
 	return RegExp.$1;
 }
 function GenarateOAuth()
@@ -321,51 +317,64 @@ function GenarateOAuth()
 		System.alert("이미 Custom via 를 사용중입니다!\nCustom Via 사용하지 않기 : Alt + D");
 		return;
 	}
-	
-	var hash_parameter = "oauth_callback=oob&oauth_consumer_key=" + ConsumerToken + "&oauth_nonce=" + getNonce() + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + getTimestamp() + "&oauth_version=1.0";
+
+	var appToken  = System.inputBox("App Token 을 입력해주세요",  "", false);
+    if (appToken == null  || appToken.Length == 0)  return;
+    
+	var appSecret = System.inputBox("App Secret 을 입력해주세요", "", false);
+    if (appSecret == null || appSecret.Length == 0) return;
+
+	var hash_parameter = "oauth_callback=oob&oauth_consumer_key=" + appToken + "&oauth_nonce=" + getNonce() + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + getTimestamp() + "&oauth_version=1.0";
 	var hash_string = "POST&https%3A%2F%2Fapi.twitter.com%2Foauth%2Frequest_token&" + urlEncode(hash_parameter);
-	
-	var oauth_signature = b64_hmac_sha1(ConsumerSecret + "&", hash_string);
-	
+
+	var oauth_signature = b64_hmac_sha1(appSecret + "&", hash_string);
+
 	hash_parameter = hash_parameter + "&oauth_signature=" + urlEncode(oauth_signature) + "%3D";
 	Http.postRequestAsync("https://api.twitter.com/oauth/request_token?" + hash_parameter, "", false,
 		function(status1)
 		{
 			if (!status1 || (status1.statusCode != "200"))
 			{
-				System.alert("에러가 발생하였습니다!");
+				var message = '';
+				if (twitter.match('"message"[ \t]*:[ \t]*"([^"]+)"'))
+					message = '\n\n' + RegExp.$1;
+
+				System.alert("에러가 발생하였습니다!" + message);
 				return;
 			}
-			
-			var OAuthToken = ParseQuerystringParameter("oauth_token", status1.body);
-			var OAuthTokenSecret = ParseQuerystringParameter("oauth_token_secret", status1.body);
-			
-			System.launchApplication("explorer", "\"https://api.twitter.com/oauth/authorize?oauth_token=" + OAuthToken + "\"", 1);
-			
-			var pin = System.inputBox("핀번호", "", false);
-			
-			hash_parameter = "oauth_callback=oob&oauth_consumer_key=" + ConsumerToken + "&oauth_nonce=" + getNonce() + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + getTimestamp() + "&oauth_token=" + OAuthToken + "&oauth_verifier=" + pin + "&oauth_version=1.0";
+
+			var userToken  = ParseQuerystringParameter("oauth_token", 		 status1.body);
+			var userSecret = ParseQuerystringParameter("oauth_token_secret", status1.body);
+
+			System.launchApplication("explorer", "\"https://api.twitter.com/oauth/authorize?oauth_token=" + userToken + "\"", 1);
+
+			var pin = System.inputBox("핀 번호를 입력해주세요", "", false);
+
+			hash_parameter = "oauth_callback=oob&oauth_consumer_key=" + appToken + "&oauth_nonce=" + getNonce() + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + getTimestamp() + "&oauth_token=" + userToken + "&oauth_verifier=" + pin + "&oauth_version=1.0";
 			hash_string = "POST&https%3A%2F%2Fapi.twitter.com%2Foauth%2Faccess_token&" + urlEncode(hash_parameter);
-			oauth_signature = b64_hmac_sha1(ConsumerSecret + "&" + OAuthTokenSecret, hash_string);
+			oauth_signature = b64_hmac_sha1(appSecret + "&" + userSecret, hash_string);
 			hash_parameter = hash_parameter + "&oauth_signature=" + urlEncode(oauth_signature) + "%3D";
 			http = Http.postRequestAsync("https://api.twitter.com/oauth/access_token?" + hash_parameter, "", false,
 				function(status2)
 				{
 					if (!status2 || (status2.statusCode != "200"))
 					{
-						System.alert("에러가 발생하였습니다!");
+						var message = '';
+						if (twitter.match('"message"[ \t]*:[ \t]*"([^"]+)"'))
+							message = '\n\n' + RegExp.$1;
+
+						System.alert("에러가 발생하였습니다!" + message);
 						return;
 					}
-					UserToken = ParseQuerystringParameter("oauth_token", status2.body);
-					UserTokenSecret = ParseQuerystringParameter("oauth_token_secret", status2.body);
-					UserScreenName = ParseQuerystringParameter("screen_name", status2.body);
+					userToken = ParseQuerystringParameter("oauth_token", status2.body);
+					userSecret = ParseQuerystringParameter("oauth_token_secret", status2.body);
+					var screenName = ParseQuerystringParameter("screen_name", status2.body);
 
-					System.settings.setValue("user.RyuaNerin.CustomVia.Profile" + System.activeProfile, "UserToken", UserToken);
-					System.settings.setValue("user.RyuaNerin.CustomVia.Profile" + System.activeProfile, "UserTokenSecret", UserTokenSecret);
-					System.settings.setValue("user.RyuaNerin.CustomVia.Profile" + System.activeProfile, "ScreenName", UserScreenName);
-					System.settings.reconfigure();
+                    oauthCur = [ appToken, appSecret, userToken, userSecret, screenName ];
+					oauthInfo[System.activeProfile] = oauthCur;
+					SaveSettings();
 
-					System.alert("현재 프로필은 Custom Via 를 사용합니다\n로그인된 ID : @" + UserScreenName + "\nCustom Via 사용하지 않기 : Alt + D");
+					System.alert("현재 프로필은 Custom Via 를 사용합니다\n로그인된 ID : @" + screenName + "\nCustom Via 사용하지 않기 : Alt + D");
 				}
 			);
 		}
