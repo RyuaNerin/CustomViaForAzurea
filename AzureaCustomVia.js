@@ -3,6 +3,7 @@
 // 2012-09-01
 // 2014-02-12
 // 2016-03-12
+// 2018-02-18
 
 // Alt + L : OAuth 발급
 // Alt + C : OAuth 발급 확인
@@ -152,14 +153,14 @@ function urlEncode(string)
 	if (!string) return '';
 
 	string = string + '';
-	var reserved_chars = /[ \r\n\t!*"'();:@&=+$,\/?%#\[\]<>{}|`^\\\u0080-\uffff]/,
+	var reserved_chars = /[a-zA-Z0-9\-\.\_\~]/;
 	str_len = string.length, i, string_arr = string.split(''), c;
 
 	for (i = 0; i < str_len; i++)
 	{
-		if (c = string_arr[i].match(reserved_chars))
+		if (!string_arr[i].match(reserved_chars))
 		{
-			c = c[0].charCodeAt(0);
+			c = string_arr[i].charCodeAt(0);
 
 			if (c < 128)
 				string_arr[i] = hex(c);
